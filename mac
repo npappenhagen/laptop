@@ -1,16 +1,42 @@
-#!/bin/sh
+#!/bin/bash
 
-# Welcome to the thoughtbot laptop script!
-# Be prepared to turn your laptop (or desktop, no haters here)
-# into an awesome development machine.
+# terraform your machine.
 
 # shellcheck disable=SC3043
+
+SECTIONS=$*
+if [[ -z "$SECTIONS" ]]; then
+  SECTIONS="all"
+fi
 
 fancy_echo() {
   local fmt="$1"; shift
 
   # shellcheck disable=SC2059
   printf "\\n$fmt\\n" "$@"
+}
+
+add_unless_present() {
+  local file="$1" line="$2"
+  grep -Fqs "$line" "$file" || echo "$line" >> "$file"
+}
+
+confirm_action() {
+  local action="$1"
+  local section="$2"
+  if [[ $SECTIONS != *"${section}"* ]] && [[ $SECTIONS != *"all"* ]]; then
+    return 1
+  fi
+  if [[ $SECTIONS == *"${section}"* ]]; then
+    return 0
+  fi
+  read -r -p "$action (y/n) " response
+  if [[ "$response" =~ ^([yY][eE][sS]|[yY])+$ ]]; then
+    SECTIONS="$SECTIONS $section"
+    return 0
+  else
+    return 1
+  fi
 }
 
 append_to_zshrc() {
@@ -37,16 +63,215 @@ trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
 set -e
 
-if [ ! -d "$HOME/.bin/" ]; then
-  mkdir "$HOME/.bin"
+create_zshrc() {
+  # shellcheck disable=SC2034
+  export BREW_PREFIX=$1
+  echo "Generating zshrc with brew prefix '$BREW_PREFIX'"
+  # shellcheck disable=SC2016
+  cat <<'EOF' | envsubst '$BREW_PREFIX' > "$HOME/.zshrc"
+bindkey -e
+
+setopt noclobber
+setopt autopushd pushdminus pushdsilent pushdtohome
+
+setopt braceccl
+
+setopt notify
+setopt no_bgnice
+setopt nohup
+setopt checkjobs
+
+setopt bsd_echo
+
+setopt nullglob
+setopt extended_glob
+setopt no_nomatch
+
+setopt no_beep
+
+setopt c_bases
+
+export WORDCHARS="${WORDCHARS//\/}"
+export PATH="$HOME/.bin:$BREW_PREFIX/bin:$PATH"
+
+if [ -x "$(command -v starship)" ]; then
+  eval "$(starship init zsh)"
 fi
 
-if [ ! -f "$HOME/.zshrc" ]; then
-  touch "$HOME/.zshrc"
+if [ -x "$(command -v direnv)" ]; then
+  eval "$(direnv hook zsh)"
 fi
 
-# shellcheck disable=SC2016
-append_to_zshrc 'export PATH="$HOME/.bin:$PATH"'
+if [ -x "$(command -v zoxide)" ]; then
+  eval "$(zoxide init zsh)"
+fi
+
+if [ -x "$(command -v brew)" ]; then
+  eval "$($BREW_PREFIX/bin/brew shellenv)"
+fi
+
+[ -f $BREW_PREFIX/opt/asdf/libexec/asdf.sh ] && . $BREW_PREFIX/opt/asdf/libexec/asdf.sh
+
+autoload -Uz compinit && compinit
+
+alias be='bundle exec'
+
+# Better programs if they're installed
+function alias_if_installed() {
+  local command="$1" alias="$2"
+  if [ -x "$(command -v "$command")" ]; then
+    alias "$alias"="$command"
+  fi
+}
+
+alias_if_installed exa ls
+alias_if_installed bat cat
+alias_if_installed htop top
+alias_if_installed dfc df
+alias_if_installed dust du
+alias_if_installed procs ps
+
+if [ -x $(command -v fzf) ]; then
+  [[ $- == *i* ]] && source "$BREW_PREFIX/opt/fzf/shell/completion.zsh" 2> /dev/null
+  source "$BREW_PREFIX/opt/fzf/shell/key-bindings.zsh"
+fi
+export FZF_DEFAULT_COMMAND='rg --files --hidden --smart-case --follow --glob "!.git/*"'
+export FZF_CTRL_T_COMMAND='rg --files --hidden --smart-case --follow --glob "!.git/*"'
+EOF
+}
+
+create_gitconfig() {
+  cat <<'EOF' > "$HOME/.gitconfig"
+[alias]
+st = status
+cm = commit -v
+co = checkout
+dc = diff --cached
+please = push --force-with-lease
+fix = commit --amend --no-edit
+lb = log --graph --format=format:'%C(blue)%h%C(reset) - %C(bold green)(%ar)%C(reset) %C(white)%s%C(reset) %C(bold white)— %an%C(reset)%C(bold yellow)%d%C(reset)' --abbrev-commit --date=relative main..HEAD
+current-branch = rev-parse --abbrev-ref HEAD
+recent-branches = for-each-ref --sort=-committerdate refs/heads/ --format='%(refname:short)'
+cob = !"git branch -l --format '%(refname:short)' --sort=-committerdate | fzf --preview 'git log --oneline --decorate --color {}' | xargs -n1 git co"
+
+[url "git@github.com:"]
+  insteadOf = gh:
+
+[core]
+  pager = delta
+  trustctime = false
+  excludesfile = ~/.config/git/ignore
+
+[delta]
+  navigate = true
+  side-by-side = true
+  line-numbers = true
+  syntax-theme = "Monokai Extended"
+
+[merge]
+  conflictStyle = diff3
+  ff = false
+  log = true
+
+[rerere]
+  enabled = true
+
+[push]
+  default = current
+  autoSetupRemote = true
+EOF
+}
+
+create_gitignore() {
+  cat <<'EOF' > "$HOME/.config/git/ignore"
+# Mac
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Vim
+[._]*.s[a-v][a-z]
+!*.svg  # comment out if you don't need vector files
+[._]*.sw[a-p]
+[._]s[a-rt-v][a-z]
+[._]ss[a-gi-z]
+[._]sw[a-p]
+
+# VSCode
+vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+!.vscode/*.code-snippets
+
+# Local History for Visual Studio Code
+.history/
+
+# Built Visual Studio Code Extensions
+*.vsix
+EOF
+}
+
+append_general_dependencies() {
+  fancy_echo "Appending general dependencies to Brewfile"
+
+  tee "$HOME/.Brewfile" <<-EOF
+    # General
+    tap "thoughtbot/formulae"
+    tap "homebrew/services"
+    tap "universal-ctags/universal-ctags"
+    tap "github/gh"
+
+    # mas-cli to install macOS apps
+    brew "mas"
+
+    # General apps
+    cask "slack" unless File.directory?("/Applications/Slack.app")
+    cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
+    cask "1password" unless File.directory?("/Applications/1Password 7.app")
+    cask "1password-cli"
+    cask "postman" unless File.directory?("/Applications/Postman.app")
+    cask "iterm2" unless File.directory?("/Applications/iTerm.app")
+
+
+    # Unix
+    brew "universal-ctags", args: ["HEAD"]
+    brew "git"
+    brew "openssl"
+    brew "gpg"
+    brew "zsh"
+
+    # GitHub extensions
+    brew "gh"
+    cask "github" unless File.directory?("/Applications/GitHub Desktop.app")
+    brew "git-lfs"
+
+    # Editor
+    cask "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
+    cask "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
+
+    # Programming language prerequisites and package managers
+    brew "libyaml" # should come after openssl
+    brew "coreutils"
+EOF
+}
+
+if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
+  fancy_echo "Generating SSH key..."
+  ssh-keygen -t ed25519 -C "nate.machine- ${USER}" -N "" -f "$HOME/.ssh/id_ed25519"
+  pbcopy < "$HOME/.ssh/id_ed25519.pub"
+  fancy_echo "SSH key copied to clipboard. Press enter to open Github so you can add the new key."
+  read -r
+  open "https://github.com/settings/ssh/new"
+  read -r -p "Press enter when done"
+  # Adding Github's SSH keys to known_hosts
+  curl -L https://api.github.com/meta | jq -r '.ssh_keys | .[]' | sed -e 's/^/github.com /' >> "$HOME/.ssh/known_hosts"
+fi
 
 # Determine Homebrew prefix
 arch="$(uname -m)"
@@ -56,159 +281,328 @@ else
   HOMEBREW_PREFIX="/usr/local"
 fi
 
-update_shell() {
-  local shell_path;
-  shell_path="$(command -v zsh)"
+if [ ! -d "$HOME/.bin/" ]; then
+  mkdir "$HOME/.bin"
+fi
 
-  fancy_echo "Changing your shell to zsh ..."
-  if ! grep "$shell_path" /etc/shells > /dev/null 2>&1 ; then
-    fancy_echo "Adding '$shell_path' to /etc/shells"
-    sudo sh -c "echo $shell_path >> /etc/shells"
-  fi
-  sudo chsh -s "$shell_path" "$USER"
-}
-
-case "$SHELL" in
-  */zsh)
-    if [ "$(command -v zsh)" != "$HOMEBREW_PREFIX/bin/zsh" ] ; then
-      update_shell
+if confirm_action "Do you want to setup Homebrew and install useful apps?" brew; then
+  gem_install_or_update() {
+    if gem list "$1" --installed > /dev/null; then
+      gem update "$@"
+    else
+      gem install "$@"
     fi
-    ;;
-  *)
-    update_shell
-    ;;
-esac
+  }
 
-# checks architecture
-if [ "$(uname -m)" = "arm64" ]
-  then
-  # checks if Rosetta is already installed
-  if ! pkgutil --pkg-info=com.apple.pkg.RosettaUpdateAuto > /dev/null 2>&1
-  then
-    echo "Installing Rosetta"
-    # Installs Rosetta2
-    softwareupdate --install-rosetta --agree-to-license
-  else
-    echo "Rosetta is installed"
+  # ----- Install Homebrew and useful apps -----
+
+  if ! command -v brew >/dev/null; then
+    fancy_echo "Installing Homebrew ..."
+      /bin/bash -c \
+        "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+    fancy_echo "Homebrew installed!"
+    fancy_echo "Adding Homebrew to your PATH ..."
+    if [ ! -f "$HOME/.zshrc" ]; then
+      append_to_zshrc 'eval "$(HOMEBREW_PREFIX/bin/brew shellenv)"'
+    else
+      (echo; echo 'eval "$(HOMEBREW_PREFIX/bin/brew shellenv)"') >> $HOME/.zprofile
+      eval "$(HOMEBREW_PREFIX/bin/brew shellenv)"
+
+    fi
   fi
-fi
 
-
-gem_install_or_update() {
-  if gem list "$1" --installed > /dev/null; then
-    gem update "$@"
-  else
-    gem install "$@"
+  if brew list | grep -Fq brew-cask; then
+    fancy_echo "Uninstalling old Homebrew-Cask ..."
+    brew uninstall --force brew-cask
   fi
-}
 
-if ! command -v brew >/dev/null; then
-  fancy_echo "Installing Homebrew ..."
-    /bin/bash -c \
-      "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-
-    append_to_zshrc "eval \"\$($HOMEBREW_PREFIX/bin/brew shellenv)\""
-
-    export PATH="$HOMEBREW_PREFIX/bin:$PATH"
-fi
-
-if brew list | grep -Fq brew-cask; then
-  fancy_echo "Uninstalling old Homebrew-Cask ..."
-  brew uninstall --force brew-cask
-fi
-
-fancy_echo "Updating Homebrew formulae ..."
-brew update --force # https://github.com/Homebrew/brew/issues/1151
-brew bundle --file=- <<EOF
-tap "thoughtbot/formulae"
-tap "homebrew/services"
-tap "heroku/brew"
+  fancy_echo "Updating Homebrew formulae ..."
+  brew update --force # https://github.com/Homebrew/brew/issues/1151
+  brew bundle --file=- <<EOF
+tap "homebrew/cask-fonts"
+tap "hashicorp/tap"
 
 # Unix
-brew "universal-ctags"
+brew "awscli"
+brew "bat"
+brew "curl"
+brew "direnv"
+brew "dust"
+brew "exa"
+brew "fd"
+brew "fzf"
+brew "gettext"
 brew "git"
+brew "git-delta"
+brew "git-lfs"
+brew "jq"
+brew "mkcert"
 brew "openssl"
+brew "procs"
 brew "rcm"
 brew "reattach-to-user-namespace"
-brew "the_silver_searcher"
+brew "ripgrep"
+brew "sd"
+brew "shared-mime-info"
+brew "starship"
 brew "tmux"
+brew "universal-ctags"
 brew "vim"
 brew "watchman"
+brew "zoxide"
 brew "zsh"
 
-# Heroku
-brew "heroku/brew/heroku"
-brew "parity"
+
 
 # GitHub
 brew "gh"
 
+# Node package dependencies
+brew "pkg-config"
+brew "pixman"
+brew "cairo"
+brew "pango"
+
+# Hashicorp
+brew "hashicorp/tap/consul"
+brew "hashicorp/tap/nomad"
+brew "hashicorp/tap/terraform"
+brew "hashicorp/tap/terraform-ls"
+brew "hashicorp/tap/vault"
+
 # Image manipulation
 brew "imagemagick"
 
-# PDF Rendering
-brew "poppler"
+# Fonts
+cask "font-inconsolata-nerd-font"
+
+# Infra related tooling
+brew "transcrypt"
+cask "session-manager-plugin"
 
 # Programming language prerequisites and package managers
 brew "libyaml" # should come after openssl
 brew "coreutils"
-brew "yarn"
 cask "gpg-suite-no-mail"
 
-# Databases
-brew "postgresql@14", restart_service: :changed
-brew "redis", restart_service: :changed
+# Install postgres for the dev headers and tools
+brew "postgresql@14"
 EOF
 
-fancy_echo "Update heroku binary ..."
-brew unlink heroku
-brew link --force heroku
-
-fancy_echo "Configuring asdf version manager ..."
-if [ ! -d "$HOME/.asdf" ]; then
-  brew install asdf
-  append_to_zshrc "source $(brew --prefix asdf)/libexec/asdf.sh" 1
+# Link gettext to install envsubst (used later)
+brew link --force gettext
 fi
 
-alias install_asdf_plugin=add_or_update_asdf_plugin
-add_or_update_asdf_plugin() {
-  local name="$1"
-  local url="$2"
-
-  if ! asdf plugin-list | grep -Fq "$name"; then
-    asdf plugin-add "$name" "$url"
+if confirm_action "Do you want to setup a nicer shell environment?" shell; then
+  if [ ! -f "$HOME/.zshrc" ]; then
+    fancy_echo "Setting up zshrc..."
+    create_zshrc $HOMEBREW_PREFIX
   else
-    asdf plugin-update "$name"
+    confirm_action "You already have a zshrc, would you like to overwrite it?" zsh && create_zshrc $HOMEBREW_PREFIX
   fi
-}
 
-# shellcheck disable=SC1091
-. "$(brew --prefix asdf)/libexec/asdf.sh"
-add_or_update_asdf_plugin "ruby" "https://github.com/asdf-vm/asdf-ruby.git"
-add_or_update_asdf_plugin "nodejs" "https://github.com/asdf-vm/asdf-nodejs.git"
-
-install_asdf_language() {
-  local language="$1"
-  local version
-  version="$(asdf list-all "$language" | grep -v "[a-z]" | tail -1)"
-
-  if ! asdf list "$language" | grep -Fq "$version"; then
-    asdf install "$language" "$version"
-    asdf global "$language" "$version"
+  if [ ! -f "$HOME/.gitconfig" ]; then
+    fancy_echo "Setting up gitconfig..."
+    create_gitconfig
+  else
+    fancy_echo "gitconfig already exists, skipping..."
   fi
-}
 
-fancy_echo "Installing latest Ruby ..."
-install_asdf_language "ruby"
-gem update --system
-number_of_cores=$(sysctl -n hw.ncpu)
-bundle config --global jobs $((number_of_cores - 1))
+  mkdir -p .config/git
+  if [ ! -f "$HOME/.config/git/ignore" ]; then
+    fancy_echo "Setting up global gitignore..."
+    create_gitignore
+  else
+    fancy_echo "gitignore already exists, skipping..."
+  fi
 
-fancy_echo "Installing latest Node ..."
-install_asdf_language "nodejs"
+  update_shell() {
+    local shell_path;
+    shell_path="$(command -v zsh)"
+
+    fancy_echo "Changing your shell to zsh ..."
+    if ! grep "$shell_path" /etc/shells > /dev/null 2>&1 ; then
+      fancy_echo "Adding '$shell_path' to /etc/shells"
+      sudo sh -c "echo $shell_path >> /etc/shells"
+    fi
+    sudo chsh -s "$shell_path" "$USER"
+  }
+
+  case "$SHELL" in
+    */zsh)
+      if [ "$(command -v zsh)" != '/usr/local/bin/zsh' ] ; then
+        update_shell
+      fi
+      ;;
+    *)
+      update_shell
+      ;;
+  esac
+fi
+
+if confirm_action "Do you want to setup ASDF and install default versions of tools and languages?" asdf; then
+  # ----- Install ASDF and setup Ruby & Node -----
+
+  fancy_echo "Configuring asdf version manager ..."
+  if [ ! -d "$HOME/.asdf" ]; then
+    brew install asdf
+    source $(brew --prefix asdf)/libexec/asdf.sh
+
+    add_unless_present "$HOME/.default-gems" "bundler"
+    add_unless_present "$HOME/.default-npm-packages" "yarn"
+  fi
+
+  add_or_update_asdf_plugin() {
+    local name="$1"
+    local url="$2"
+
+    if ! asdf plugin-list | grep -Fq "$name"; then
+      asdf plugin-add "$name" "$url"
+    else
+      asdf plugin-update "$name"
+    fi
+  }
+
+  LANGS=(
+    "yarn"
+    "golang"
+    "terraform"
+    "shellcheck"
+  )
+
+  # shellcheck disable=SC1091
+  . "$(brew --prefix asdf)/libexec/asdf.sh"
+  add_or_update_asdf_plugin "nomad"
+  add_or_update_asdf_plugin "ruby" "https://github.com/asdf-vm/asdf-ruby.git"
+  add_or_update_asdf_plugin "nodejs" "https://github.com/asdf-vm/asdf-nodejs.git"
+  add_or_update_asdf_plugin "python"
+  for lang in "${LANGS[@]}"; do
+    add_or_update_asdf_plugin "$lang"
+  done
+
+  install_asdf_language() {
+    local language="$1"
+    local version=${2:-"$(asdf list-all "$language" | grep -v "[a-z]" | tail -1)"}
+
+    if ! asdf list "$language" | grep -Fq "$version"; then
+      asdf install "$language" "$version"
+      asdf global "$language" "$version"
+    fi
+  }
+
+  fancy_echo "Installing latest Ruby ..."
+  install_asdf_language "ruby"
+  gem update --system
+  number_of_cores=$(sysctl -n hw.ncpu)
+  bundle config --global jobs $((number_of_cores - 1))
+
+  fancy_echo "Installing Python so we can build Node"
+  latest_py="$(asdf latest python)"
+  install_asdf_language "python" $latest_py
+  install_asdf_language "python" 3.10.7
+  asdf global python $latest_py 3.10.7
+
+  fancy_echo "Installing latest Node ..."
+  install_asdf_language "nodejs"
+
+  fancy_echo "Installing additional languages ..."
+  for lang in "${LANGS[@]}"; do
+    latest="$(asdf latest "$lang")"
+    install_asdf_language "$lang" "$latest"
+    asdf global "$lang" "$latest"
+  done
+fi
+
+# ----- Run user specific customisations -----
 
 if [ -f "$HOME/.laptop.local" ]; then
-  fancy_echo "Running your customizations from ~/.laptop.local ..."
+  fancy_echo "Running your customisations from ~/.laptop.local ..."
   # shellcheck disable=SC1091
   . "$HOME/.laptop.local"
 fi
+
+function set_private_env_var() {
+  local var=$1
+  local prompt=${2:-"Enter $var"}
+  local value
+  touch .envrc-private
+  if ! grep -q "${var}" .envrc-private; then
+    read -s -p "${prompt}: " value
+    echo "export ${var}=${value}" >> .envrc-private
+    echo
+  fi
+ }
+
+if confirm_action "Do you want to setup AWS credentials?" aws; then
+  if [ ! -x "$(command -v aws)" ]; then
+    fancy_echo "Installing AWS CLI"
+    brew install awscli
+  fi
+
+  fancy_echo "Setting up AWS credentials. You will need your access and secret key from 1Password."
+  aws configure
+fi
+
+if confirm_action "test1" "test1"; then
+  echo 'test 1'
+fi
+
+if confirm_action "test2" "test2"; then
+  echo 'test 2'
+fi
+
+function echo_if_section() {
+  local section="$1"
+  shift
+  local message="$*"
+  if [[ $SECTIONS == *"${section}"* ]] || [[ $SECTIONS == *"all"* ]]; then
+    echo "$message" | sed -E 's/(.)- /\1\n- /g'
+  fi
+}
+
+echo
+cat <<'EOM'
+All done! Welcome to your new laptop!
+
+Here's a summary of what we did:
+EOM
+
+echo_if_section "shell" $(cat <<'EOM'
+- Setup a basic zshrc, with a nicer prompt and some useful aliases.
+  * Homebrew and ASDF are added to the path.
+  * Try the fzf integration by pressing Ctrl+R or Ctrl+T.
+- Setup a basic git config, with some useful aliases.
+  * `git st`, `git co` and `git cm` should do what you (hopefully) expect.
+  * `git lb` will show the commits on your branch.
+  * `git cob` opens a fuzzy finder for recent branches and check out the selected branch.
+- Sets up a basic global .gitignore file so you don\'t accidentally commit things like .DS_Store files.
+EOM
+)
+echo_if_section "brew" $(cat <<'EOM'
+- Installed and/or updated Homebrew
+- Installed several useful Homebrew packages
+EOM
+)
+echo_if_section "asdf" $(cat <<'EOM'
+- Installed ASDF and set it up with useful plugins and languages including Ruby, Node, Python and Go.
+EOM
+)
+echo_if_section "asdf" $(cat <<'EOM'
+- Installed ASDF and set it up with useful plugins and languages including Ruby, Node, Python and Go.
+EOM
+)
+
+)
+echo_if_section "aws" $(cat <<'EOM'
+- Setup AWS credentials
+EOM
+)
+echo_if_section "ssh" $(cat <<'EOM'
+- Setup SSH config
+EOM
+)
+
+cat <<'EOM'
+
+Setup should be complete. This script can be run multiple times if revisions are necessary.
+EOM
