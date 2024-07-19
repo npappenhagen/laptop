@@ -392,6 +392,7 @@ brew "postgresql@14"
 
 # Docker
 brew "docker"
+brew "orbstack"
 
 # General apps
 cask "slack" unless File.directory?("/Applications/Slack.app")
