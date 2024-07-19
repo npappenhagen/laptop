@@ -217,50 +217,6 @@ vscode/*
 EOF
 }
 
-append_general_dependencies() {
-  fancy_echo "Appending general dependencies to Brewfile"
-
-  tee "$HOME/.Brewfile" <<-EOF
-    # General
-    tap "thoughtbot/formulae"
-    tap "homebrew/services"
-    tap "universal-ctags/universal-ctags"
-    tap "github/gh"
-
-    # mas-cli to install macOS apps
-    brew "mas"
-
-    # General apps
-    cask "slack" unless File.directory?("/Applications/Slack.app")
-    cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
-    cask "1password" unless File.directory?("/Applications/1Password 7.app")
-    cask "1password-cli"
-    cask "postman" unless File.directory?("/Applications/Postman.app")
-    cask "iterm2" unless File.directory?("/Applications/iTerm.app")
-
-
-    # Unix
-    brew "universal-ctags", args: ["HEAD"]
-    brew "git"
-    brew "openssl"
-    brew "gpg"
-    brew "zsh"
-
-    # GitHub extensions
-    brew "gh"
-    cask "github" unless File.directory?("/Applications/GitHub Desktop.app")
-    brew "git-lfs"
-
-    # Editor
-    cask "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
-    cask "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
-
-    # Programming language prerequisites and package managers
-    brew "libyaml" # should come after openssl
-    brew "coreutils"
-EOF
-}
-
 if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
   fancy_echo "Generating SSH key..."
   ssh-keygen -t ed25519 -C "nate.machine- ${USER}" -N "" -f "$HOME/.ssh/id_ed25519"
@@ -354,6 +310,8 @@ brew "zsh"
 
 
 
+
+
 # GitHub
 brew "gh"
 
@@ -387,6 +345,19 @@ cask "gpg-suite-no-mail"
 
 # Install postgres for the dev headers and tools
 brew "postgresql@14"
+
+# General apps
+brew "slack" unless File.directory?("/Applications/Slack.app")
+brew "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
+brew "1password" unless File.directory?("/Applications/1Password 7.app")
+brew "1password-cli"
+brew "postman" unless File.directory?("/Applications/Postman.app")
+cask "iterm2" unless File.directory?("/Applications/iTerm.app")
+
+
+# Editor
+brew "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
+brew "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
 EOF
 
 # Link gettext to install envsubst (used later)
