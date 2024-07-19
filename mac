@@ -275,7 +275,6 @@ if confirm_action "Do you want to setup Homebrew and install useful apps?" brew;
   fancy_echo "Updating Homebrew formulae ..."
   brew update --force # https://github.com/Homebrew/brew/issues/1151
   brew bundle --file=- <<EOF
-tap "homebrew/cask-fonts"
 tap "hashicorp/tap"
 
 # Unix
@@ -284,7 +283,6 @@ brew "bat"
 brew "curl"
 brew "direnv"
 brew "dust"
-brew "exa"
 brew "fd"
 brew "fzf"
 brew "gettext"
@@ -347,17 +345,15 @@ cask "gpg-suite-no-mail"
 brew "postgresql@14"
 
 # General apps
-brew "slack" unless File.directory?("/Applications/Slack.app")
-brew "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
-brew "1password" unless File.directory?("/Applications/1Password 7.app")
-brew "1password-cli"
-brew "postman" unless File.directory?("/Applications/Postman.app")
+cask "slack" unless File.directory?("/Applications/Slack.app")
+cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
+cask "postman" unless File.directory?("/Applications/Postman.app")
 cask "iterm2" unless File.directory?("/Applications/iTerm.app")
 
 
 # Editor
-brew "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
-brew "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
+cask "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
+cask "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
 EOF
 
 # Link gettext to install envsubst (used later)
@@ -514,14 +510,6 @@ if confirm_action "Do you want to setup AWS credentials?" aws; then
   aws configure
 fi
 
-if confirm_action "test1" "test1"; then
-  echo 'test 1'
-fi
-
-if confirm_action "test2" "test2"; then
-  echo 'test 2'
-fi
-
 function echo_if_section() {
   local section="$1"
   shift
@@ -543,7 +531,7 @@ echo_if_section "shell" $(cat <<'EOM'
   * Homebrew and ASDF are added to the path.
   * Try the fzf integration by pressing Ctrl+R or Ctrl+T.
 - Setup a basic git config, with some useful aliases.
-  * `git st`, `git co` and `git cm` should do what you (hopefully) expect.
+  * `git st`, `git co` and `git cm` should do what you expect.
   * `git lb` will show the commits on your branch.
   * `git cob` opens a fuzzy finder for recent branches and check out the selected branch.
 - Sets up a basic global .gitignore file so you don\'t accidentally commit things like .DS_Store files.
@@ -561,8 +549,6 @@ EOM
 echo_if_section "asdf" $(cat <<'EOM'
 - Installed ASDF and set it up with useful plugins and languages including Ruby, Node, Python and Go.
 EOM
-)
-
 )
 echo_if_section "aws" $(cat <<'EOM'
 - Setup AWS credentials
