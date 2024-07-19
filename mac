@@ -390,6 +390,9 @@ cask "gpg-suite-no-mail"
 # Install postgres for the dev headers and tools
 brew "postgresql@14"
 
+# Docker
+brew "docker"
+
 # General apps
 cask "slack" unless File.directory?("/Applications/Slack.app")
 cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")

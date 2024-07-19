@@ -10,7 +10,7 @@ based on what is already installed on the machine.
 Requirements
 ------------
 
-We support:
+We support:\
 
 * macOS Sonoma (14.x) on Apple Silicon and Intel
 * macOS Ventura (13.x) on Apple Silicon and Intel
