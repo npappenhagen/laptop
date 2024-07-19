@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# terraform your machine.
+# Terraform your machine - a script to set up a new Mac (M1) with essential tools and configurations.
 
 # shellcheck disable=SC3043
 
@@ -58,6 +58,7 @@ append_to_zshrc() {
   fi
 }
 
+# Setup trap for error handling
 # shellcheck disable=SC2154
 trap 'ret=$?; test $ret -ne 0 && printf "failed\n\n" >&2; exit $ret' EXIT
 
@@ -135,6 +136,7 @@ if [ -x $(command -v fzf) ]; then
   [[ $- == *i* ]] && source "$BREW_PREFIX/opt/fzf/shell/completion.zsh" 2> /dev/null
   source "$BREW_PREFIX/opt/fzf/shell/key-bindings.zsh"
 fi
+
 export FZF_DEFAULT_COMMAND='rg --files --hidden --smart-case --follow --glob "!.git/*"'
 export FZF_CTRL_T_COMMAND='rg --files --hidden --smart-case --follow --glob "!.git/*"'
 EOF
@@ -217,9 +219,10 @@ vscode/*
 EOF
 }
 
+# Generate SSH key if it doesn't exist
 if [ ! -f "$HOME/.ssh/id_ed25519" ]; then
   fancy_echo "Generating SSH key..."
-  ssh-keygen -t ed25519 -C "nate.machine- ${USER}" -N "" -f "$HOME/.ssh/id_ed25519"
+  ssh-keygen -t ed25519 -C "nate.machine-${USER}" -N "" -f "$HOME/.ssh/id_ed25519"
   pbcopy < "$HOME/.ssh/id_ed25519.pub"
   fancy_echo "SSH key copied to clipboard. Press enter to open Github so you can add the new key."
   read -r
@@ -237,10 +240,12 @@ else
   HOMEBREW_PREFIX="/usr/local"
 fi
 
+# Create bin directory if it doesn't exist
 if [ ! -d "$HOME/.bin/" ]; then
   mkdir "$HOME/.bin"
 fi
 
+# Install Homebrew and useful apps
 if confirm_action "Do you want to setup Homebrew and install useful apps?" brew; then
   gem_install_or_update() {
     if gem list "$1" --installed > /dev/null; then
@@ -306,10 +311,6 @@ brew "watchman"
 brew "zoxide"
 brew "zsh"
 
-
-
-
-
 # GitHub
 brew "gh"
 
@@ -330,7 +331,52 @@ brew "hashicorp/tap/vault"
 brew "imagemagick"
 
 # Fonts
+cask "font-3270-nerd-font"
+cask "font-fira-mono-nerd-font"
+cask "font-inconsolata-go-nerd-font"
+cask "font-inconsolata-lgc-nerd-font"
 cask "font-inconsolata-nerd-font"
+cask "font-monofur-nerd-font"
+cask "font-overpass-nerd-font"
+cask "font-ubuntu-mono-nerd-font"
+cask "font-agave-nerd-font"
+cask "font-arimo-nerd-font"
+cask "font-anonymice-nerd-font"
+cask "font-aurulent-sans-mono-nerd-font"
+cask "font-bigblue-terminal-nerd-font"
+cask "font-bitstream-vera-sans-mono-nerd-font"
+cask "font-blex-mono-nerd-font"
+cask "font-caskaydia-cove-nerd-font"
+cask "font-code-new-roman-nerd-font"
+cask "font-cousine-nerd-font"
+cask "font-daddy-time-mono-nerd-font"
+cask "font-dejavu-sans-mono-nerd-font"
+cask "font-droid-sans-mono-nerd-font"
+cask "font-fantasque-sans-mono-nerd-font"
+cask "font-fira-code-nerd-font"
+cask "font-go-mono-nerd-font"
+cask "font-gohufont-nerd-font"
+cask "font-hack-nerd-font"
+cask "font-hasklug-nerd-font"
+cask "font-heavy-data-nerd-font"
+cask "font-hurmit-nerd-font"
+cask "font-im-writing-nerd-font"
+cask "font-iosevka-nerd-font"
+cask "font-jetbrains-mono-nerd-font"
+cask "font-lekton-nerd-font"
+cask "font-liberation-nerd-font"
+cask "font-meslo-lg-nerd-font"
+cask "font-monoid-nerd-font"
+cask "font-mononoki-nerd-font"
+cask "font-mplus-nerd-font"
+cask "font-noto-nerd-font"
+cask "font-open-dyslexic-nerd-font"
+cask "font-profont-nerd-font"
+cask "font-proggy-clean-tt-nerd-font"
+cask "font-roboto-mono-nerd-font"
+cask "font-sauce-code-pro-nerd-font"
+cask "font-shure-tech-mono-nerd-font"
+cask "font-space-mono-nerd-font"
 
 # Infra related tooling
 brew "transcrypt"
@@ -349,17 +395,25 @@ cask "slack" unless File.directory?("/Applications/Slack.app")
 cask "google-chrome" unless File.directory?("/Applications/Google Chrome.app")
 cask "postman" unless File.directory?("/Applications/Postman.app")
 cask "iterm2" unless File.directory?("/Applications/iTerm.app")
-
+cask "brave-browser" unless File.directory?("/Applications/Brave Browser.app")
+cask "1password" unless File.directory?("/Applications/1Password.app")
 
 # Editor
 cask "visual-studio-code" unless File.directory?("/Applications/Visual Studio Code.app")
-cask "jetbrains-toolbox" unless File.directory?("/Applications/JetBrainsToolbox.app")
+cask "jetbrains-toolbox" unless File.directory?("/Applications/JetBrains Toolbox.app")
+
+# Programming language prerequisites and package managers
+brew "libyaml" # should come after openssl
+brew "coreutils"
+cask "gpg-suite-no-mail"
+
 EOF
 
-# Link gettext to install envsubst (used later)
-brew link --force gettext
+  # Link gettext to install envsubst (used later)
+  brew link --force gettext
 fi
 
+# Setup a nicer shell environment
 if confirm_action "Do you want to setup a nicer shell environment?" shell; then
   if [ ! -f "$HOME/.zshrc" ]; then
     fancy_echo "Setting up zshrc..."
@@ -375,7 +429,7 @@ if confirm_action "Do you want to setup a nicer shell environment?" shell; then
     fancy_echo "gitconfig already exists, skipping..."
   fi
 
-  mkdir -p .config/git
+  mkdir -p "$HOME/.config/git"
   if [ ! -f "$HOME/.config/git/ignore" ]; then
     fancy_echo "Setting up global gitignore..."
     create_gitignore
@@ -413,7 +467,7 @@ if confirm_action "Do you want to setup ASDF and install default versions of too
   fancy_echo "Configuring asdf version manager ..."
   if [ ! -d "$HOME/.asdf" ]; then
     brew install asdf
-    source $(brew --prefix asdf)/libexec/asdf.sh
+    source "$(brew --prefix asdf)/libexec/asdf.sh"
 
     add_unless_present "$HOME/.default-gems" "bundler"
     add_unless_present "$HOME/.default-npm-packages" "yarn"
@@ -519,6 +573,7 @@ function echo_if_section() {
   fi
 }
 
+# Summary of actions performed
 echo
 cat <<'EOM'
 All done! Welcome to your new laptop!
